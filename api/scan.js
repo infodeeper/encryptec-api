@@ -3,9 +3,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "*");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
 
   if (req.method !== "POST") {
     return res.status(200).json({ result: "Use POST" });
@@ -16,24 +14,40 @@ export default async function handler(req, res) {
       ? JSON.parse(req.body)
       : req.body;
 
-    const token = body?.input || "unknown token";
+    const token = body?.input || "unknown";
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4.1",
+        model: "meta-llama/llama-3.3-70b-instruct:free",
+        temperature: 0.2,
         messages: [
           {
             role: "system",
-            content: "You are a crypto scam detection AI. Identify risks, red flags, and legitimacy."
+            content: `
+You are a crypto scam detection expert.
+
+Return:
+
+Scam Probability: (0-100%)
+Verdict: (Safe / Suspicious / Scam)
+
+Reasons:
+- ...
+- ...
+
+Advice:
+- ...
+- ...
+`
           },
           {
             role: "user",
-            content: `Check this token or project for scam risks: ${token}. Provide risk level and reasoning.`
+            content: `Check this token/project: ${token}`
           }
         ]
       })
@@ -41,8 +55,12 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
+    if (!data.choices) {
+      return res.status(200).json({ result: "AI error", debug: data });
+    }
+
     return res.status(200).json({
-      result: data?.choices?.[0]?.message?.content || "No AI response"
+      result: data.choices[0].message.content
     });
 
   } catch (err) {
