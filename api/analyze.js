@@ -16,7 +16,7 @@ export default async function handler(req, res) {
       ? JSON.parse(req.body)
       : req.body;
 
-    const wallet = body?.input || "unknown wallet";
+    const input = body?.input || "unknown";
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -25,15 +25,15 @@ export default async function handler(req, res) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4.1",
+        model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: "You are a professional crypto wallet risk analyst. Give concise, high-signal insights."
+            content: "You are a crypto security expert."
           },
           {
             role: "user",
-            content: `Analyze this crypto wallet: ${wallet}. Give risk level, behavior, and recommendations.`
+            content: `Analyze this wallet: ${input}`
           }
         ]
       })
@@ -41,7 +41,24 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
+    // 👇 ВАЖНО: покажем ВСЮ ошибку если есть
+    if (!data.choices) {
+      return res.status(200).json({
+        result: "OpenAI error",
+        debug: data
+      });
+    }
+
     return res.status(200).json({
+      result: data.choices[0].message.content
+    });
+
+  } catch (err) {
+    return res.status(500).json({
+      error: err.message
+    });
+  }
+}
       result: data?.choices?.[0]?.message?.content || "No AI response"
     });
 
