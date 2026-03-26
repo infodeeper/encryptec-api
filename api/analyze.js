@@ -16,28 +16,47 @@ export default async function handler(req, res) {
 
     const input = body?.input || "wallet";
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "meta-llama/llama-3.3-70b-instruct:free",
-        messages: [
-          {
-            role: "user",
-            content: `Analyze wallet: ${input}`
-          }
-        ]
-      })
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `
+Analyze this crypto wallet: ${input}
+
+Return:
+Risk Score (0-100)
+Risk Level
+Summary
+Red Flags
+Recommendations
+`
+                }
+              ]
+            }
+          ]
+        })
+      }
+    );
 
     const data = await response.json();
 
-    // 🔥 ВСЕГДА ВОЗВРАЩАЕМ ПОЛНЫЙ ОТВЕТ
+    if (!data.candidates) {
+      return res.status(200).json({
+        result: "AI error",
+        debug: data
+      });
+    }
+
     return res.status(200).json({
-      full: data
+      result: data.candidates[0].content.parts[0].text
     });
 
   } catch (err) {
