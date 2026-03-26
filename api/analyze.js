@@ -1,12 +1,9 @@
 export default async function handler(req, res) {
-  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "*");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
 
   if (req.method !== "POST") {
     return res.status(200).json({ result: "Use POST" });
@@ -17,45 +14,20 @@ export default async function handler(req, res) {
       ? JSON.parse(req.body)
       : req.body;
 
-    const wallet = body?.input || "unknown wallet";
+    const input = body?.input || "wallet";
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://your-site.com",
-        "X-Title": "Encryptec"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         model: "meta-llama/llama-3.3-70b-instruct:free",
-        temperature: 0.3,
         messages: [
           {
-            role: "system",
-            content: `
-You are a professional blockchain security analyst.
-
-Return response STRICTLY in this format:
-
-Risk Score: (0-100)
-Risk Level: (Low / Medium / High)
-
-Summary:
-(short explanation)
-
-Red Flags:
-- ...
-- ...
-
-Recommendations:
-- ...
-- ...
-`
-          },
-          {
             role: "user",
-            content: `Analyze this crypto wallet: ${wallet}`
+            content: `Analyze wallet: ${input}`
           }
         ]
       })
@@ -63,16 +35,9 @@ Recommendations:
 
     const data = await response.json();
 
-    // DEBUG если что-то пошло не так
-    if (!data.choices) {
-      return res.status(200).json({
-        result: "AI error",
-        debug: data
-      });
-    }
-
+    // 🔥 ВСЕГДА ВОЗВРАЩАЕМ ПОЛНЫЙ ОТВЕТ
     return res.status(200).json({
-      result: data.choices[0].message.content
+      full: data
     });
 
   } catch (err) {
