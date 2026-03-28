@@ -17,7 +17,8 @@ export default async function handler(req, res) {
       });
     }
 
-    const response = await fetch(process.env.ALCHEMY_URL, {
+    // 🔹 1. БАЛАНС
+    const balanceRes = await fetch(process.env.ALCHEMY_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -30,31 +31,88 @@ export default async function handler(req, res) {
       })
     });
 
-    const data = await response.json();
+    const balanceData = await balanceRes.json();
+    const balanceWei = parseInt(balanceData.result, 16);
+    const balanceEth = balanceWei / 1e18;
 
-    if (!data.result) {
-      return res.status(200).json({
-        result: "❌ RPC error",
-        debug: data
-      });
+    // 🔹 2. ТРАНЗАКЦИИ (через Alchemy)
+    const txRes = await fetch(process.env.ALCHEMY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "alchemy_getAssetTransfers",
+        params: [{
+          fromBlock: "0x0",
+          toBlock: "latest",
+          fromAddress: address,
+          category: ["external", "erc20"],
+          maxCount: "0x10"
+        }],
+        id: 2
+      })
+    });
+
+    const txData = await txRes.json();
+    const txs = txData?.result?.transfers || [];
+
+    const txCount = txs.length;
+
+    // 🔹 3. ВХОД / ВЫХОД
+    let outgoing = txs.length;
+    let incoming = 0; // (упрощенно)
+
+    // 🔥 RISK ENGINE
+    let risk = 0;
+    let flags = [];
+
+    if (balanceEth < 0.01) {
+      risk += 20;
+      flags.push("Low balance");
     }
 
-    const balanceWei = parseInt(data.result, 16);
-    const balanceEth = balanceWei / 1e18;
+    if (txCount === 0) {
+      risk += 40;
+      flags.push("No activity");
+    }
+
+    if (txCount > 15) {
+      risk += 20;
+      flags.push("High activity");
+    }
+
+    let level = "Low";
+    if (risk > 60) level = "High";
+    else if (risk > 30) level = "Medium";
 
     return res.status(200).json({
       result: `
 Wallet: ${address}
 
-Balance: ${balanceEth.toFixed(6)} ETH
+📊 CORE
+Balance: ${balanceEth.toFixed(4)} ETH
+Transactions (last): ${txCount}
 
-Status: Alchemy connected ✅
+📈 ACTIVITY
+Outgoing: ${outgoing}
+Incoming: ${incoming}
+
+🚨 RISK
+Score: ${risk}
+Level: ${level}
+
+Flags:
+${flags.map(f => "- " + f).join("\n")}
+
+Status: Advanced analysis ✅
 `
     });
 
   } catch (err) {
     return res.status(200).json({
-      result: "❌ Server error",
+      result: "❌ Error",
       error: err.message
     });
   }
