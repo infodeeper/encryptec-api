@@ -17,7 +17,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const response = await fetch("https://rpc.ankr.com/eth", {
+    const response = await fetch(process.env.ALCHEMY_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -48,7 +48,7 @@ Wallet: ${address}
 
 Balance: ${balanceEth.toFixed(6)} ETH
 
-Status: Ankr RPC working ✅
+Status: Alchemy connected ✅
 `
     });
 
