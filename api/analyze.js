@@ -7,7 +7,6 @@ export default async function handler(req, res) {
 
     const address = body?.input;
 
-    // 🔹 BALANCE
     const balanceRes = await fetch(process.env.ALCHEMY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -21,7 +20,6 @@ export default async function handler(req, res) {
 
     const balanceData = await balanceRes.json();
 
-    // 🔹 OUTGOING
     const outRes = await fetch(process.env.ALCHEMY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -41,7 +39,6 @@ export default async function handler(req, res) {
 
     const outData = await outRes.json();
 
-    // 🔹 INCOMING
     const inRes = await fetch(process.env.ALCHEMY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -62,6 +59,7 @@ export default async function handler(req, res) {
     const inData = await inRes.json();
 
     return res.status(200).json({
+      result: "DEBUG READY ✅",
       debug: {
         balance: balanceData,
         outgoing: outData,
@@ -71,6 +69,7 @@ export default async function handler(req, res) {
 
   } catch (err) {
     return res.status(200).json({
+      result: "ERROR",
       error: err.message
     });
   }
