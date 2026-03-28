@@ -6,13 +6,6 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   try {
-    // ✅ проверка ключа
-    if (!process.env.ETHERSCAN_API_KEY) {
-      return res.status(200).json({
-        result: "❌ API key not found in Vercel"
-      });
-    }
-
     const body =
       typeof req.body === "string" ? JSON.parse(req.body) : req.body;
 
@@ -20,36 +13,54 @@ export default async function handler(req, res) {
 
     if (!address) {
       return res.status(200).json({
-        result: "❌ No wallet address provided"
+        result: "❌ No wallet address"
       });
     }
 
-    // ✅ запрос баланса
-    const balanceRes = await fetch(
-      `https://api.etherscan.io/api?module=account&action=balance&address=${address}&tag=latest&apikey=${process.env.ETHERSCAN_API_KEY}`
-    );
+    // 🔥 запрос к Ethereum RPC
+    const response = await fetch("https://cloudflare-eth.com", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "eth_getBalance",
+        params: [address, "latest"],
+        id: 1
+      })
+    });
 
-    const balanceData = await balanceRes.json();
+    const data = await response.json();
 
-    if (!balanceData.result) {
+    if (!data.result) {
       return res.status(200).json({
-        result: "❌ Etherscan error",
-        debug: balanceData
+        result: "❌ RPC error",
+        debug: data
       });
     }
 
-    const balance = (balanceData.result / 1e18).toFixed(4);
+    // перевод из wei → ETH
+    const balanceWei = parseInt(data.result, 16);
+    const balanceEth = balanceWei / 1e18;
 
     return res.status(200).json({
       result: `
 Wallet: ${address}
 
-Balance: ${balance} ETH
+Balance: ${balanceEth.toFixed(6)} ETH
 
-✅ API WORKING
+✅ Working without API key
 `
     });
 
+  } catch (err) {
+    return res.status(200).json({
+      result: "❌ Server error",
+      error: err.message
+    });
+  }
+}
   } catch (err) {
     return res.status(200).json({
       result: "❌ SERVER ERROR",
