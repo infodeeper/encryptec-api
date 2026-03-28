@@ -17,34 +17,30 @@ export default async function handler(req, res) {
       });
     }
 
-    let balanceEth = 0;
+    const response = await fetch("https://rpc.ankr.com/eth", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "eth_getBalance",
+        params: [address, "latest"],
+        id: 1
+      })
+    });
 
-    try {
-      const response = await fetch("https://cloudflare-eth.com", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "eth_getBalance",
-          params: [address, "latest"],
-          id: 1
-        })
-      });
+    const data = await response.json();
 
-      const data = await response.json();
-
-      if (data.result) {
-        const wei = parseInt(data.result, 16);
-        balanceEth = wei / 1e18;
-      }
-    } catch (rpcError) {
+    if (!data.result) {
       return res.status(200).json({
-        result: "⚠️ RPC error (network issue)",
-        error: rpcError.message
+        result: "❌ RPC error",
+        debug: data
       });
     }
+
+    const balanceWei = parseInt(data.result, 16);
+    const balanceEth = balanceWei / 1e18;
 
     return res.status(200).json({
       result: `
@@ -52,13 +48,13 @@ Wallet: ${address}
 
 Balance: ${balanceEth.toFixed(6)} ETH
 
-Status: Live blockchain data ✅
+Status: Ankr RPC working ✅
 `
     });
 
   } catch (err) {
     return res.status(200).json({
-      result: "❌ Server crashed",
+      result: "❌ Server error",
       error: err.message
     });
   }
