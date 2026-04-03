@@ -13,138 +13,119 @@ export default async function handler(req, res) {
 
     if (!token) {
       return res.status(200).json({
-        result: "❌ Enter token contract address"
+        error: "No token address"
       });
     }
 
-    // ---------------------------
-    // SAFE FETCH
-    // ---------------------------
-    let transfers = [];
-
-    try {
-      const txRes = await fetch(process.env.ALCHEMY_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "alchemy_getAssetTransfers",
-          params: [{
-            fromBlock: "0x0",
-            toBlock: "latest",
-            contractAddresses: [token],
-            category: ["erc20"],
-            maxCount: "0x64"
-          }],
-          id: 1
-        })
-      });
-
-      const txData = await txRes.json();
-
-      transfers = txData?.result?.transfers || [];
-
-    } catch (e) {
+    if (!process.env.ALCHEMY_URL) {
       return res.status(200).json({
-        result: "⚠️ RPC error (Alchemy issue)"
+        error: "Alchemy not configured"
       });
     }
 
+    // ---------------------------
+    // FETCH TRANSFERS
+    // ---------------------------
+    const txRes = await fetch(process.env.ALCHEMY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "alchemy_getAssetTransfers",
+        params: [{
+          fromBlock: "0x0",
+          toBlock: "latest",
+          contractAddresses: [token],
+          category: ["erc20"],
+          maxCount: "0x64"
+        }],
+        id: 1
+      })
+    });
+
+    const txData = await txRes.json();
+    const transfers = txData?.result?.transfers || [];
+
+    // ---------------------------
+    // BASIC METRICS
+    // ---------------------------
     const txCount = transfers.length;
 
-    // ---------------------------
-    // USERS
-    // ---------------------------
     const users = new Set();
+    let volume = 0;
 
     transfers.forEach(tx => {
       if (tx.from) users.add(tx.from);
       if (tx.to) users.add(tx.to);
+      if (tx.value) volume += Number(tx.value);
     });
 
     const uniqueUsers = users.size;
 
     // ---------------------------
-    // VOLUME
+    // SCAM LOGIC
     // ---------------------------
-    let volume = 0;
-
-    transfers.forEach(tx => {
-      if (tx.value) volume += Number(tx.value);
-    });
-
-    // ---------------------------
-    // ACTIVITY
-    // ---------------------------
-    let activity = "Low";
-    if (txCount > 50) activity = "High";
-    else if (txCount > 10) activity = "Medium";
-
-    // ---------------------------
-    // SCAM DETECTION
-    // ---------------------------
-    let scamScore = 0;
+    let score = 0;
     let flags = [];
 
     if (txCount < 5) {
-      scamScore += 30;
-      flags.push("Very low activity");
+      score += 30;
+      flags.push("Liquidity not established");
     }
 
     if (uniqueUsers < 5) {
-      scamScore += 30;
-      flags.push("Very few users");
+      score += 30;
+      flags.push("Very low holder count");
     }
 
     if (volume === 0) {
-      scamScore += 20;
-      flags.push("No volume");
+      score += 20;
+      flags.push("No trading volume");
     }
 
     if (txCount > 30 && uniqueUsers < 10) {
-      scamScore += 20;
-      flags.push("Suspicious pattern");
+      score += 20;
+      flags.push("Suspicious trading pattern");
     }
 
-    let level = "Safe";
-    if (scamScore > 70) level = "High Risk";
-    else if (scamScore > 40) level = "Suspicious";
+    // ---------------------------
+    // LEVEL
+    // ---------------------------
+    let level = "SAFE";
+    if (score > 70) level = "HIGH RISK";
+    else if (score > 40) level = "SUSPICIOUS";
 
     // ---------------------------
-    // FINAL (ВСЕГДА RESULT!)
+    // VERDICT
+    // ---------------------------
+    let verdict = "This token looks relatively safe.";
+
+    if (level === "HIGH RISK") {
+      verdict = "This token shows strong signs of a scam. Avoid interacting.";
+    }
+
+    if (level === "SUSPICIOUS") {
+      verdict = "This token has suspicious patterns. Proceed with caution.";
+    }
+
+    // ---------------------------
+    // RESPONSE ПОД UI
     // ---------------------------
     return res.status(200).json({
-      result: `
-Token: ${token}
-
-📊 Activity:
-Transactions: ${txCount}
-Users: ${uniqueUsers}
-Volume: ${volume.toFixed(2)}
-
-📈 Status:
-${activity}
-
-🕵️ Scam Analysis:
-Score: ${scamScore}
-Level: ${level}
-
-Signals:
-${flags.length ? flags.map(f => "- " + f).join("\n") : "None"}
-
-Status: Scan Complete ✅
-`
+      token: token,
+      riskScore: score,
+      riskLevel: level,
+      flags: flags,
+      verdict: verdict,
+      stats: {
+        transactions: txCount,
+        users: uniqueUsers,
+        volume: volume
+      }
     });
 
   } catch (err) {
     return res.status(200).json({
-      result: "❌ Fatal error",
-      error: err.message
-    });
-  }
-}
-    return res.status(200).json({
-      result: "❌ Scan Error",
       error: err.message
     });
   }
