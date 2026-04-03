@@ -18,33 +18,42 @@ export default async function handler(req, res) {
     }
 
     // ---------------------------
-    // 1. TOKEN TRANSFERS
+    // SAFE FETCH
     // ---------------------------
-    const txRes = await fetch(process.env.ALCHEMY_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "alchemy_getAssetTransfers",
-        params: [{
-          fromBlock: "0x0",
-          toBlock: "latest",
-          contractAddresses: [token],
-          category: ["erc20"],
-          withMetadata: true,
-          maxCount: "0x64"
-        }],
-        id: 1
-      })
-    });
+    let transfers = [];
 
-    const txData = await txRes.json();
-    const transfers = txData?.result?.transfers || [];
+    try {
+      const txRes = await fetch(process.env.ALCHEMY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "alchemy_getAssetTransfers",
+          params: [{
+            fromBlock: "0x0",
+            toBlock: "latest",
+            contractAddresses: [token],
+            category: ["erc20"],
+            maxCount: "0x64"
+          }],
+          id: 1
+        })
+      });
+
+      const txData = await txRes.json();
+
+      transfers = txData?.result?.transfers || [];
+
+    } catch (e) {
+      return res.status(200).json({
+        result: "⚠️ RPC error (Alchemy issue)"
+      });
+    }
 
     const txCount = transfers.length;
 
     // ---------------------------
-    // 2. UNIQUE USERS
+    // USERS
     // ---------------------------
     const users = new Set();
 
@@ -56,74 +65,53 @@ export default async function handler(req, res) {
     const uniqueUsers = users.size;
 
     // ---------------------------
-    // 3. VOLUME
+    // VOLUME
     // ---------------------------
     let volume = 0;
 
     transfers.forEach(tx => {
-      if (tx.value) {
-        volume += Number(tx.value);
-      }
+      if (tx.value) volume += Number(tx.value);
     });
 
     // ---------------------------
-    // 4. ACTIVITY
+    // ACTIVITY
     // ---------------------------
     let activity = "Low";
-
     if (txCount > 50) activity = "High";
     else if (txCount > 10) activity = "Medium";
 
     // ---------------------------
-    // 5. SCAM DETECTION
+    // SCAM DETECTION
     // ---------------------------
     let scamScore = 0;
     let flags = [];
 
-    // 💣 мало транзакций
     if (txCount < 5) {
       scamScore += 30;
       flags.push("Very low activity");
     }
 
-    // 💣 мало пользователей
     if (uniqueUsers < 5) {
       scamScore += 30;
-      flags.push("Very few holders/users");
+      flags.push("Very few users");
     }
 
-    // 💣 нет объема
     if (volume === 0) {
       scamScore += 20;
       flags.push("No volume");
     }
 
-    // 💣 странная активность
     if (txCount > 30 && uniqueUsers < 10) {
       scamScore += 20;
-      flags.push("Suspicious activity pattern");
+      flags.push("Suspicious pattern");
     }
 
-    // уровень риска
     let level = "Safe";
     if (scamScore > 70) level = "High Risk";
     else if (scamScore > 40) level = "Suspicious";
 
     // ---------------------------
-    // 6. LABELS
-    // ---------------------------
-    let labels = [];
-
-    if (uniqueUsers > 50) labels.push("Community Token");
-    if (activity === "High") labels.push("Active Trading");
-    if (scamScore > 60) labels.push("Possible Scam");
-
-    if (labels.length === 0) {
-      labels.push("Unknown Token");
-    }
-
-    // ---------------------------
-    // FINAL RESPONSE
+    // FINAL (ВСЕГДА RESULT!)
     // ---------------------------
     return res.status(200).json({
       result: `
@@ -135,10 +123,7 @@ Users: ${uniqueUsers}
 Volume: ${volume.toFixed(2)}
 
 📈 Status:
-Activity Level: ${activity}
-
-🏷 Labels:
-${labels.join(", ")}
+${activity}
 
 🕵️ Scam Analysis:
 Score: ${scamScore}
@@ -147,11 +132,17 @@ Level: ${level}
 Signals:
 ${flags.length ? flags.map(f => "- " + f).join("\n") : "None"}
 
-Status: Token Scan Complete ✅
+Status: Scan Complete ✅
 `
     });
 
   } catch (err) {
+    return res.status(200).json({
+      result: "❌ Fatal error",
+      error: err.message
+    });
+  }
+}
     return res.status(200).json({
       result: "❌ Scan Error",
       error: err.message
