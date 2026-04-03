@@ -5,65 +5,156 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  if (req.method !== "POST") {
-    return res.status(200).json({ result: "Use POST" });
-  }
-
   try {
-    const body = typeof req.body === "string"
-      ? JSON.parse(req.body)
-      : req.body;
+    const body =
+      typeof req.body === "string" ? JSON.parse(req.body) : req.body;
 
-    const token = body?.input || "unknown";
+    const token = body?.input;
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    if (!token) {
+      return res.status(200).json({
+        result: "❌ Enter token contract address"
+      });
+    }
+
+    // ---------------------------
+    // 1. TOKEN TRANSFERS
+    // ---------------------------
+    const txRes = await fetch(process.env.ALCHEMY_URL, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "meta-llama/llama-3.3-70b-instruct:free",
-        temperature: 0.2,
-        messages: [
-          {
-            role: "system",
-            content: `
-You are a crypto scam detection expert.
-
-Return:
-
-Scam Probability: (0-100%)
-Verdict: (Safe / Suspicious / Scam)
-
-Reasons:
-- ...
-- ...
-
-Advice:
-- ...
-- ...
-`
-          },
-          {
-            role: "user",
-            content: `Check this token/project: ${token}`
-          }
-        ]
+        jsonrpc: "2.0",
+        method: "alchemy_getAssetTransfers",
+        params: [{
+          fromBlock: "0x0",
+          toBlock: "latest",
+          contractAddresses: [token],
+          category: ["erc20"],
+          withMetadata: true,
+          maxCount: "0x64"
+        }],
+        id: 1
       })
     });
 
-    const data = await response.json();
+    const txData = await txRes.json();
+    const transfers = txData?.result?.transfers || [];
 
-    if (!data.choices) {
-      return res.status(200).json({ result: "AI error", debug: data });
+    const txCount = transfers.length;
+
+    // ---------------------------
+    // 2. UNIQUE USERS
+    // ---------------------------
+    const users = new Set();
+
+    transfers.forEach(tx => {
+      if (tx.from) users.add(tx.from);
+      if (tx.to) users.add(tx.to);
+    });
+
+    const uniqueUsers = users.size;
+
+    // ---------------------------
+    // 3. VOLUME
+    // ---------------------------
+    let volume = 0;
+
+    transfers.forEach(tx => {
+      if (tx.value) {
+        volume += Number(tx.value);
+      }
+    });
+
+    // ---------------------------
+    // 4. ACTIVITY
+    // ---------------------------
+    let activity = "Low";
+
+    if (txCount > 50) activity = "High";
+    else if (txCount > 10) activity = "Medium";
+
+    // ---------------------------
+    // 5. SCAM DETECTION
+    // ---------------------------
+    let scamScore = 0;
+    let flags = [];
+
+    // 💣 мало транзакций
+    if (txCount < 5) {
+      scamScore += 30;
+      flags.push("Very low activity");
     }
 
+    // 💣 мало пользователей
+    if (uniqueUsers < 5) {
+      scamScore += 30;
+      flags.push("Very few holders/users");
+    }
+
+    // 💣 нет объема
+    if (volume === 0) {
+      scamScore += 20;
+      flags.push("No volume");
+    }
+
+    // 💣 странная активность
+    if (txCount > 30 && uniqueUsers < 10) {
+      scamScore += 20;
+      flags.push("Suspicious activity pattern");
+    }
+
+    // уровень риска
+    let level = "Safe";
+    if (scamScore > 70) level = "High Risk";
+    else if (scamScore > 40) level = "Suspicious";
+
+    // ---------------------------
+    // 6. LABELS
+    // ---------------------------
+    let labels = [];
+
+    if (uniqueUsers > 50) labels.push("Community Token");
+    if (activity === "High") labels.push("Active Trading");
+    if (scamScore > 60) labels.push("Possible Scam");
+
+    if (labels.length === 0) {
+      labels.push("Unknown Token");
+    }
+
+    // ---------------------------
+    // FINAL RESPONSE
+    // ---------------------------
     return res.status(200).json({
-      result: data.choices[0].message.content
+      result: `
+Token: ${token}
+
+📊 Activity:
+Transactions: ${txCount}
+Users: ${uniqueUsers}
+Volume: ${volume.toFixed(2)}
+
+📈 Status:
+Activity Level: ${activity}
+
+🏷 Labels:
+${labels.join(", ")}
+
+🕵️ Scam Analysis:
+Score: ${scamScore}
+Level: ${level}
+
+Signals:
+${flags.length ? flags.map(f => "- " + f).join("\n") : "None"}
+
+Status: Token Scan Complete ✅
+`
     });
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(200).json({
+      result: "❌ Scan Error",
+      error: err.message
+    });
   }
 }
