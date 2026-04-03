@@ -17,7 +17,9 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔹 1. BALANCE
+    // ---------------------------
+    // 1. BALANCE
+    // ---------------------------
     const balanceRes = await fetch(process.env.ALCHEMY_URL, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -30,9 +32,11 @@ export default async function handler(req, res) {
     });
 
     const balanceData = await balanceRes.json();
-    const balanceEth = parseInt(balanceData.result, 16) / 1e18;
+    const balanceEth = parseInt(balanceData.result || "0x0", 16) / 1e18;
 
-    // 🔹 2. OUTGOING TX
+    // ---------------------------
+    // 2. OUTGOING TX
+    // ---------------------------
     const outRes = await fetch(process.env.ALCHEMY_URL, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -44,6 +48,7 @@ export default async function handler(req, res) {
           toBlock: "latest",
           fromAddress: address,
           category: ["external", "erc20"],
+          withMetadata: true,
           maxCount: "0x32"
         }],
         id: 2
@@ -53,7 +58,9 @@ export default async function handler(req, res) {
     const outData = await outRes.json();
     const outgoingTxs = outData?.result?.transfers || [];
 
-    // 🔹 3. INCOMING TX
+    // ---------------------------
+    // 3. INCOMING TX
+    // ---------------------------
     const inRes = await fetch(process.env.ALCHEMY_URL, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -65,6 +72,7 @@ export default async function handler(req, res) {
           toBlock: "latest",
           toAddress: address,
           category: ["external", "erc20"],
+          withMetadata: true,
           maxCount: "0x32"
         }],
         id: 3
@@ -78,26 +86,32 @@ export default async function handler(req, res) {
     const incoming = incomingTxs.length;
     const txCount = outgoing + incoming;
 
-    // 🔹 4. TOKENS (ERC20)
+    // ---------------------------
+    // 4. TOKENS (УЛУЧШЕННЫЕ)
+    // ---------------------------
     const tokensMap = {};
 
-    outgoingTxs.concat(incomingTxs).forEach(tx => {
-      if (tx.asset && tx.value) {
-        if (!tokensMap[tx.asset]) {
-          tokensMap[tx.asset] = 0;
-        }
-        tokensMap[tx.asset] += Number(tx.value);
+    [...incomingTxs, ...outgoingTxs].forEach(tx => {
+      if (tx.category === "erc20" && tx.asset && tx.value) {
+        tokensMap[tx.asset] = (tokensMap[tx.asset] || 0) + Number(tx.value);
       }
     });
 
     const tokens = Object.entries(tokensMap)
+      .sort((a, b) => b[1] - a[1])
       .map(([symbol, value]) => `${symbol}: ${value.toFixed(2)}`)
       .slice(0, 5);
 
-    // 🔹 5. CONTRACT INTERACTIONS (DeFi)
-    const contractInteractions = outgoingTxs.filter(tx => tx.to && tx.rawContract);
+    // ---------------------------
+    // 5. DeFi ACTIVITY (УЛУЧШЕНО)
+    // ---------------------------
+    const contractInteractions = outgoingTxs.filter(
+      tx => tx.category !== "external"
+    );
 
-    // 🔹 6. LABELS (простая логика)
+    // ---------------------------
+    // 6. LABELS
+    // ---------------------------
     let labels = [];
 
     if (contractInteractions.length > 5) {
@@ -116,7 +130,34 @@ export default async function handler(req, res) {
       labels.push("Normal User");
     }
 
-    // 🔥 RISK ENGINE
+    // ---------------------------
+    // 7. BEHAVIOR ANALYSIS (🔥 НОВОЕ)
+    // ---------------------------
+    let behavior = [];
+
+    if (incoming > outgoing * 2) {
+      behavior.push("Accumulating wallet");
+    }
+
+    if (outgoing > incoming * 2) {
+      behavior.push("Distributor / possible exit");
+    }
+
+    if (txCount > 30 && balanceEth < 1) {
+      behavior.push("High activity low balance (bot-like)");
+    }
+
+    if (contractInteractions.length > 10) {
+      behavior.push("Active DeFi user");
+    }
+
+    if (behavior.length === 0) {
+      behavior.push("Neutral behavior");
+    }
+
+    // ---------------------------
+    // 8. RISK ENGINE
+    // ---------------------------
     let risk = 0;
     let flags = [];
 
@@ -144,35 +185,40 @@ export default async function handler(req, res) {
     if (risk > 70) level = "High";
     else if (risk > 40) level = "Medium";
 
+    // ---------------------------
+    // FINAL RESPONSE
+    // ---------------------------
     return res.status(200).json({
       result: `
 Wallet: ${address}
 
-📊 CORE
-Balance: ${balanceEth.toFixed(4)} ETH
-Transactions: ${txCount}
+💰 Balance: ${balanceEth.toFixed(4)} ETH
 
-📈 FLOW
-Incoming: ${incoming}
-Outgoing: ${outgoing}
+📊 Transactions:
+- Total: ${txCount}
+- Incoming: ${incoming}
+- Outgoing: ${outgoing}
 
-🪙 TOKENS
+🪙 Tokens:
 ${tokens.length ? tokens.join("\n") : "No tokens detected"}
 
-🧩 DeFi Activity
+🧩 DeFi Activity:
 Interactions: ${contractInteractions.length}
 
-🏷 LABELS
+🏷 Labels:
 ${labels.join(", ")}
 
-🚨 RISK
+🧠 Behavior:
+${behavior.join("\n")}
+
+🚨 Risk:
 Score: ${risk}
 Level: ${level}
 
 Flags:
-${flags.map(f => "- " + f).join("\n") || "None"}
+${flags.length ? flags.map(f => "- " + f).join("\n") : "None"}
 
-Status: Full Analysis ✅
+Status: PRO Analysis ✅
 `
     });
 
