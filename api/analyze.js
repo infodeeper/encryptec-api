@@ -5,9 +5,13 @@ import { analyzeTronAddress, validateTronAddress } from "./_lib/tron.js";
 import { analyzeSolanaAddress, validateSolanaAddress } from "./_lib/solana.js";
 
 function cors(res) {
-  res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_ORIGIN || "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  // This endpoint is intentionally public and is called directly by the
+  // browser. Do not let a stale/misconfigured FRONTEND_ORIGIN environment
+  // variable turn a healthy API response into a browser-level CORS failure.
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Max-Age", "86400");
   res.setHeader("Cache-Control", "no-store");
 }
 
@@ -110,7 +114,22 @@ function normalizeResult({ requestId, screenedAt, address, network, analysis, sa
 
 export default async function handler(req, res) {
   cors(res);
+
+  // Lightweight health endpoint. This does not call any external provider
+  // and is safe to use for deployment/uptime checks.
+  if (req.method === "GET") {
+    return res.status(200).json({
+      ok: true,
+      service: "encryptec-api",
+      engine_version: "aml-v1.1",
+      endpoint: "/api/analyze"
+    });
+  }
+
+  // Browsers send this preflight before the JSON POST. It must never execute
+  // provider code or depend on environment variables.
   if (req.method === "OPTIONS") return res.status(204).end();
+
   if (req.method !== "POST") return error(res, 405, "METHOD_NOT_ALLOWED", "Only POST is supported.", null);
 
   const requestId = crypto.randomUUID();
