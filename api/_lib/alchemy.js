@@ -2,11 +2,13 @@ const MAX_PAGES = Math.max(1, Number(process.env.ALCHEMY_MAX_PAGES || 10));
 const PAGE_SIZE = Math.min(1000, Math.max(1, Number(process.env.ALCHEMY_PAGE_SIZE || 100)));
 const REQUEST_TIMEOUT_MS = Math.max(3000, Number(process.env.ALCHEMY_TIMEOUT_MS || 12000));
 const NETWORK_ENV = { ethereum:"ALCHEMY_ETHEREUM_URL", polygon:"ALCHEMY_POLYGON_URL", arbitrum:"ALCHEMY_ARBITRUM_URL", base:"ALCHEMY_BASE_URL", bsc:"ALCHEMY_BSC_URL" };
+let rpcQueue = Promise.resolve();
+function enqueueRpc(task){ const run = rpcQueue.then(task, task); rpcQueue = run.catch(()=>{}); return run; }
 const SYMBOLS = { ethereum:"ETH", bsc:"BNB", polygon:"MATIC", arbitrum:"ETH", base:"ETH" };
 function timeoutSignal(ms){ return AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined; }
 export function normalizeNetwork(value){ const n=String(value||"").trim().toLowerCase(); const a={eth:"ethereum",ethereum:"ethereum",mainnet:"ethereum",bsc:"bsc",bnb:"bsc","bnb chain":"bsc",polygon:"polygon",matic:"polygon",arbitrum:"arbitrum","arbitrum one":"arbitrum",base:"base",bitcoin:"bitcoin",btc:"bitcoin",tron:"tron",trx:"tron",solana:"solana",sol:"solana",auto:"auto","auto-detect":"auto"}; return a[n]||n; }
 export function getAlchemyUrl(network){ const e=NETWORK_ENV[network]; if(e&&process.env[e]) return process.env[e]; if(network==="ethereum"&&process.env.ALCHEMY_URL) return process.env.ALCHEMY_URL; return null; }
-async function rpc(url,method,params){
+async function rpc(url,method,params){ return enqueueRpc(async ()=>{
  for(let attempt=0;attempt<3;attempt++){
    const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:Date.now(),method,params}),signal:timeoutSignal(REQUEST_TIMEOUT_MS)});
    if(r.status===429){if(attempt<2){await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));continue;}throw new Error("Alchemy HTTP 429 rate limit");}
@@ -16,6 +18,7 @@ async function rpc(url,method,params){
    return d?.result;
  }
  throw new Error("Alchemy rate limit");
+});
 }
 export async function getNativeBalance(url,address){ const r=await rpc(url,"eth_getBalance",[address,"latest"]); return Number(BigInt(r||"0x0"))/1e18; }
 const INTERNAL_TRANSFER_NETWORKS = new Set(["ethereum","polygon","base"]);
