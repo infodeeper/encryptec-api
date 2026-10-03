@@ -164,7 +164,17 @@ export default async function handler(req, res) {
     const sanctions = await screenCryptoWallet(address);
     return res.status(200).json(normalizeResult({ requestId, screenedAt, address, network: requestedNetwork, analysis, sanctions }));
   } catch (e) {
-    console.error("AML analysis failed", { requestId, error: e?.message });
-    return error(res, 502, "ANALYSIS_FAILED", "The AML analysis could not be completed.", requestId);
+    const message = String(e?.message || "The AML analysis could not be completed.");
+    console.error("AML analysis failed", { requestId, error: message });
+    if (/not configured/i.test(message)) {
+      return error(res, 503, "PROVIDER_NOT_CONFIGURED", message, requestId);
+    }
+    if (/429|rate limit|too many requests/i.test(message)) {
+      return error(res, 503, "PROVIDER_RATE_LIMITED", "A blockchain data provider is temporarily rate-limited. Please retry shortly.", requestId);
+    }
+    if (/timeout|timed out|aborted/i.test(message)) {
+      return error(res, 504, "PROVIDER_TIMEOUT", "A blockchain data provider did not respond in time. Please retry shortly.", requestId);
+    }
+    return error(res, 502, "PROVIDER_ERROR", "A blockchain data provider could not complete the screening request.", requestId, { detail: message });
   }
 }
