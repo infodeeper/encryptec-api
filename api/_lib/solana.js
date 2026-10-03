@@ -1,7 +1,14 @@
 const BASE="https://api.helius.xyz/v0";
 const TIMEOUT=15000;
 async function get(path){const key=process.env.HELIUS_API_KEY;if(!key)throw new Error("HELIUS_API_KEY is not configured");const r=await fetch(`${BASE}${path}${path.includes("?")?"&":"?"}api-key=${encodeURIComponent(key)}`,{signal:AbortSignal.timeout?AbortSignal.timeout(TIMEOUT):undefined});if(!r.ok)throw new Error(`Helius HTTP ${r.status}`);return r.json();}
-export function validateSolanaAddress(a){return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a);}
+function decodeBase58(value){
+ const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; let n=0n;
+ for(const ch of String(value||"")){const i=alphabet.indexOf(ch);if(i<0)return null;n=n*58n+BigInt(i);}
+ let hex=n.toString(16);if(hex.length%2)hex="0"+hex;let bytes=Math.ceil(hex.length/2);
+ for(const ch of String(value||"")){if(ch==="1")bytes++;else break;}
+ return bytes;
+}
+export function validateSolanaAddress(a){const v=String(a||"").trim();if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v))return false;return decodeBase58(v)===32;}
 export async function analyzeSolanaAddress(address){
  const txs=await get(`/addresses/${address}/transactions?limit=100`); const rows=Array.isArray(txs)?txs:[]; const peers=new Map();let incoming=0,outgoing=0;const assets=new Map([["SOL",true]]);
  for(const t of rows){for(const x of (t?.nativeTransfers||[])){const from=x?.fromUserAccount,to=x?.toUserAccount;if(from===address)outgoing++;if(to===address)incoming++;const peer=from===address?to:to===address?from:null;if(peer){const p=peers.get(peer)||{address:peer,incoming:0,outgoing:0,transfers:0,assets:[]};p[from===address?"outgoing":"incoming"]++;p.transfers++;peers.set(peer,p);}}for(const x of (t?.tokenTransfers||[])){if(x?.mint)assets.set(x.mint,true);const from=x?.fromUserAccount,to=x?.toUserAccount;const peer=from===address?to:to===address?from:null;if(peer){const p=peers.get(peer)||{address:peer,incoming:0,outgoing:0,transfers:0,assets:[]};p[from===address?"outgoing":"incoming"]++;p.transfers++;peers.set(peer,p);}}}
