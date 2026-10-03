@@ -44,7 +44,7 @@ export async function screenCryptoWallet(address) {
             }
           }
         },
-        topics: ["sanction", "sanction.linked", "debarment", "role.pep"]
+        topics: ["sanction", "sanction.linked", "debarment"]
       })
     });
 
