@@ -44,11 +44,6 @@ function calculateRisk({ sanctions, behavior, counterparties }) {
     score += 15;
     flags.push("Strong outbound transaction imbalance");
   }
-  const contracts = Number(behavior.contract_counterparties || 0);
-  if (contracts >= 10) {
-    score += 5;
-    flags.push("Frequent smart-contract counterparties");
-  }
   const checkedSignals = sanctions.status !== "not_checked" || total > 0;
   score = Math.min(100, score);
   let confidence = 0.2;
