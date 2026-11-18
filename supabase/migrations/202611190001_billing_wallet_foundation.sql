@@ -133,9 +133,11 @@ create table if not exists public.billing_payments (
   raw_data jsonb not null default '{}'::jsonb,
   observed_at timestamptz not null default now(),
   confirmed_at timestamptz,
-  created_at timestamptz not null default now(),
-  unique (network_key, lower(tx_hash), transfer_index)
+  created_at timestamptz not null default now()
 );
+
+create unique index if not exists billing_payments_chain_tx_transfer_uidx
+  on public.billing_payments (network_key, lower(tx_hash), transfer_index);
 
 create index if not exists billing_payments_invoice_idx
   on public.billing_payments (invoice_id, created_at);
@@ -213,7 +215,7 @@ alter table public.billing_audit_events enable row level security;
 revoke all on public.billing_customers, public.company_wallets, public.derivation_counters,
   public.wallet_accounts, public.supported_assets, public.billing_invoices,
   public.billing_payments, public.customer_subscriptions, public.billing_audit_events
-from anon, authenticated;
+from public, anon, authenticated;
 
 grant select, insert, update, delete on public.billing_customers, public.company_wallets,
   public.derivation_counters, public.wallet_accounts, public.supported_assets,
