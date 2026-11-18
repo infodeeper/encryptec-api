@@ -9,34 +9,44 @@
 - Wrong-token, wrong-chain, underpaid, overpaid, late and reorged transfers must not silently activate or extend access.
 - Treasury sweeps are separate from invoice settlement and require server-side policy checks.
 
-## Selected network scope
+## Confirmed payment network scope
 - TRON — USDT (TRC-20)
+- BNB Smart Chain — USDT (BEP-20)
 - Arbitrum One — USDT and USDC
 - Polygon PoS — USDT and USDC
 - Base — USDC
 - Ethereum Mainnet — USDT and USDC
-- EVM USDT — exact chain must be confirmed before enabling; do not treat this as a chain identifier.
 
-The API currently has a BNB Smart Chain (bsc) configuration for AML data retrieval. That does not mean BSC USDT billing is approved. Confirm whether EVM USDT means BNB Smart Chain or another EVM chain.
+This is six networks and nine network/token combinations. Each token must be configured by its canonical contract address and decimals for the specific chain. Never accept a token by symbol alone.
 
 ## Target architecture
 1. **Billing API** — create invoices from authenticated customer identity and server-side plan price. Never trust client-supplied customer ID, amount, plan price, token contract or destination wallet.
-2. **Wallet/address provider** — Turnkey is a wallet/key-management layer, not an invoice ledger or chain indexer. Provision isolated deposit addresses only after custody and recovery are approved. Keep signing credentials server-side.
+2. **Wallet/address provider** — Turnkey Company Wallets manages company-controlled keys and signing. ENCRYPTEC owns invoice-to-address allocation and persistence. One EVM deposit account can receive ERC-20 assets on Ethereum, BNB Chain, Arbitrum, Polygon and Base; the invoice is still chain-specific. A distinct TRON address is required for TRC-20 deposits.
 3. **Chain monitors** — independent TRON and EVM adapters verify destination, canonical token contract, amount, transaction success, block inclusion and finality. Use transaction hash plus log/transfer index as unique payment identity and recheck recent confirmations for reorgs.
 4. **Invoice and entitlement ledger** — persist invoices, observed transfers, reconciliation outcomes, audit events and subscription periods. Enforce idempotency and uniqueness in the database. Extend access only after verified payment. Route partial, excess, late and duplicate payments to explicit states.
 5. **Treasury** — deposit addresses are not treasury. Sweeps are separate jobs with gas/energy policy, destination allowlist, daily limits and auditable approval. Never store seed phrases or private keys in application environment variables.
 
-## Current code in this branch
-- api/_lib/billing/invoice-domain.js: exact decimal arithmetic using BigInt, payment classification, status transition guards and deterministic billing-period reference.
-- tests/billing-invoice.test.js: unit tests for amount precision, payment classification and lifecycle transitions.
+## Turnkey integration status
+- Turnkey Organization ID has been supplied by the operator.
+- Operator reports that an API keypair has been created and Company Wallets is visible in the dashboard.
+- Server-side SDK client/configuration and guarded wallet functions are implemented on the Turnkey feature branch.
+- Wallet mutations are disabled by default. No live Turnkey request or wallet has been created by this code change.
+- EVM deposit-account derivation is scaffolded using a database-reserved BIP32 index.
+- TRON derivation remains disabled pending an end-to-end verification of Turnkey's supported address/public-key format.
+- No authenticated public endpoint exposes Turnkey operations.
 
-This is a safe domain foundation only. No public billing endpoint, database persistence, wallet generation, blockchain monitor, live provider credentials, subscription activation or production deployment has been added.
+## Database decision still required
+The repository does not currently establish a persistent billing database. Before deriving customer addresses or creating invoices, select the existing product database or approve a managed PostgreSQL database. The database must support transactional unique index allocation, unique constraints, and durable invoice/payment records. Serverless memory is not a valid ledger.
 
-## Blocking decisions before live integration
-1. Confirm what EVM USDT means (for example, BNB Smart Chain USDT).
-2. Select the persistent database already used by the product, or approve a new managed database. Serverless memory is not a valid invoice/payment ledger.
-3. Approve the wallet custody model and Turnkey organization/API setup. Provider account and server-side credentials are required before real addresses can be generated.
-4. Define finality thresholds per network and operational refund/overpayment policy.
+## Remaining implementation gates
+1. Confirm and provision the persistent database.
+2. Configure Turnkey credentials in Vercel Preview only, then run a read-only connectivity check.
+3. Create or select the ENCRYPTEC company HD wallet in Turnkey and persist its wallet ID.
+4. Implement transactional address-index allocation and address persistence.
+5. Validate TRON derivation separately before enabling TRON deposit invoices.
+6. Define finality thresholds per network and operational refund/overpayment policy.
+7. Implement authenticated invoice API, chain monitors and subscription entitlement updates.
+8. Complete testnet/small-value verification before production.
 
 ## Security baseline
 - Authenticated customer ownership checks on every invoice read.
@@ -46,4 +56,5 @@ This is a safe domain foundation only. No public billing endpoint, database pers
 - Verify provider webhook signatures; otherwise independently verify through RPC/indexer.
 - Never activate from frontend callbacks or unverified webhook payloads.
 - Append-only audit trail for reconciliation and manual overrides.
+- Wallet mutations remain disabled until database allocation and operator authorization are implemented.
 - No production deployment or treasury transaction without explicit operator approval.
