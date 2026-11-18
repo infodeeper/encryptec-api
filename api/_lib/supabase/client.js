@@ -48,7 +48,8 @@ export async function supabaseRequest(path, {
       method,
       headers: {
         apikey: key,
-        Authorization: `Bearer ${key}`,
+        // New sb_secret_* keys are opaque API keys, not JWTs. Do not send them as Bearer tokens.
+        ...(!key.startsWith("sb_secret_") ? { Authorization: `Bearer ${key}` } : {}),
         "Content-Type": "application/json",
         ...(prefer ? { Prefer: prefer } : {}),
       },
