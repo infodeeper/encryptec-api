@@ -2,5 +2,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test"
+  },
+  "dependencies": {
+    "@turnkey/sdk-server": "8.9.1"
   }
 }
