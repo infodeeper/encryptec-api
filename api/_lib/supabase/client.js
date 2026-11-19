@@ -44,7 +44,8 @@ export async function supabaseRequest(path, {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(`${url}/rest/v1/${normalizedPath}`, {
+    const requestUrl = new URL(`${url}/rest/v1/${normalizedPath}`);
+    const response = await fetchImpl(requestUrl, {
       method,
       headers: {
         apikey: key,
@@ -66,6 +67,9 @@ export async function supabaseRequest(path, {
       const error = new Error(payload?.message || `Supabase request failed with status ${response.status}`);
       error.code = payload?.code || "SUPABASE_REQUEST_FAILED";
       error.status = response.status;
+      error.details = payload?.details ?? null;
+      error.hint = payload?.hint ?? null;
+      error.requestPath = `${requestUrl.pathname}${requestUrl.search}`;
       throw error;
     }
     return payload;
