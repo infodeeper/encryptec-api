@@ -32,7 +32,11 @@ export default async function handler(req, res) {
     // Never return provider messages, request headers, URLs or credentials.
     console.error("Supabase preview health check failed", {
       code: error?.code || "SUPABASE_CHECK_FAILED",
-      status: error?.status || null
+      status: error?.status || null,
+      message: error?.message || null,
+      details: error?.details || null,
+      hint: error?.hint || null,
+      requestPath: error?.requestPath || null
     });
 
     return res.status(503).json({
