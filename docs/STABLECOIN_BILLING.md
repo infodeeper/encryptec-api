@@ -19,6 +19,13 @@
 
 This is six networks and nine network/token combinations. Each token must be configured by its canonical contract address and decimals for the specific chain. Never accept a token by symbol alone.
 
+## Database foundation
+- Supabase Postgres is the source of truth for customers, wallet accounts, invoices, observed payments, subscriptions and audit events.
+- Migration `supabase/migrations/202611190001_billing_wallet_foundation.sql` creates the initial schema.
+- The nine network/token rows are inserted disabled. Canonical contract addresses must be independently verified and populated before enabling an asset.
+- `reserve_derivation_index(family)` is a server-role-only PostgreSQL RPC that atomically allocates EVM/TRON derivation indexes. Do not use an in-memory counter.
+- RLS is enabled for every billing table. Browser roles have no table grants or policies; only the trusted backend service role receives access.
+
 ## Target architecture
 1. **Billing API** — create invoices from authenticated customer identity and server-side plan price. Never trust client-supplied customer ID, amount, plan price, token contract or destination wallet.
 2. **Wallet/address provider** — Turnkey Company Wallets manages company-controlled keys and signing. ENCRYPTEC owns invoice-to-address allocation and persistence. One EVM deposit account can receive ERC-20 assets on Ethereum, BNB Chain, Arbitrum, Polygon and Base; the invoice is still chain-specific. A distinct TRON address is required for TRC-20 deposits.
@@ -35,18 +42,16 @@ This is six networks and nine network/token combinations. Each token must be con
 - TRON derivation remains disabled pending an end-to-end verification of Turnkey's supported address/public-key format.
 - No authenticated public endpoint exposes Turnkey operations.
 
-## Database decision still required
-The repository does not currently establish a persistent billing database. Before deriving customer addresses or creating invoices, select the existing product database or approve a managed PostgreSQL database. The database must support transactional unique index allocation, unique constraints, and durable invoice/payment records. Serverless memory is not a valid ledger.
-
 ## Remaining implementation gates
-1. Confirm and provision the persistent database.
-2. Configure Turnkey credentials in Vercel Preview only, then run a read-only connectivity check.
-3. Create or select the ENCRYPTEC company HD wallet in Turnkey and persist its wallet ID.
-4. Implement transactional address-index allocation and address persistence.
+1. Apply the Supabase migration and configure the server-side key in Vercel Preview.
+2. Run read-only Supabase and Turnkey connectivity checks.
+3. Create or select the ENCRYPTEC company HD wallet and persist its wallet ID.
+4. Implement the authenticated customer/address provisioning workflow.
 5. Validate TRON derivation separately before enabling TRON deposit invoices.
-6. Define finality thresholds per network and operational refund/overpayment policy.
-7. Implement authenticated invoice API, chain monitors and subscription entitlement updates.
-8. Complete testnet/small-value verification before production.
+6. Verify canonical contract addresses and set supported assets enabled only after validation.
+7. Define finality thresholds per network and operational refund/overpayment policy.
+8. Implement authenticated invoice API, chain monitors and subscription entitlement updates.
+9. Complete testnet/small-value verification before production.
 
 ## Security baseline
 - Authenticated customer ownership checks on every invoice read.

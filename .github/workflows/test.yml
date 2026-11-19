@@ -5,11 +5,13 @@ on:
     branches:
       - main
       - feat/stablecoin-monthly-invoices
+      - feat/turnkey-company-wallets
   push:
     branches:
       - main
       - feat/stablecoin-monthly-invoices
       - feat/turnkey-company-wallets
+      - feat/supabase-billing-foundation
 
 jobs:
   test:
